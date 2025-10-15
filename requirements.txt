@@ -4,3 +4,6 @@ tabulate
 schedule
 plyer
 rich
+streamlit
+plotly
+python-dotenv
