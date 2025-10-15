@@ -9,6 +9,7 @@ import time
 from api_fetcher import fetch_stock_data, fetch_historical_data
 from analyzer import PortfolioAnalyzer
 from alerts import AlertManager
+from report_generator import ReportGenerator
 
 # Page config
 st.set_page_config(
@@ -175,6 +176,30 @@ def main():
     
     # Alerts Section
     display_alerts_section()
+    
+    # Export Section
+    st.subheader("Export Reports")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Export to PDF"):
+            with st.spinner("Generating PDF report..."):
+                try:
+                    report_gen = ReportGenerator(portfolio_df)
+                    filepath = report_gen.generate_pdf()
+                    st.success(f"PDF report generated: {filepath}")
+                except Exception as e:
+                    st.error(f"Error generating PDF: {str(e)}")
+    
+    with col2:
+        if st.button("Export to Excel"):
+            with st.spinner("Generating Excel report..."):
+                try:
+                    report_gen = ReportGenerator(portfolio_df)
+                    filepath = report_gen.generate_excel()
+                    st.success(f"Excel report generated: {filepath}")
+                except Exception as e:
+                    st.error(f"Error generating Excel: {str(e)}")
     
     # Auto-refresh
     st.sidebar.title("Settings")

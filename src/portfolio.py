@@ -7,6 +7,7 @@ import os
 from api_fetcher import fetch_stock_data
 from analyzer import PortfolioAnalyzer
 from alerts import AlertManager, start_alert_monitor
+from report_generator import ReportGenerator
 from rich.console import Console
 
 console = Console()
@@ -88,6 +89,15 @@ def main():
     alert_group.add_argument('--interval', type=int, default=60,
                           help='Alert check interval in seconds (default: 60)')
     
+    # Export related arguments
+    export_group = parser.add_argument_group('Export Options')
+    export_group.add_argument('--export-pdf', action='store_true',
+                           help='Export portfolio report as PDF')
+    export_group.add_argument('--export-excel', action='store_true',
+                           help='Export portfolio report as Excel')
+    export_group.add_argument('--output', type=str,
+                           help='Output filename for export')
+    
     args = parser.parse_args()
     
     # Handle alert commands if any
@@ -104,6 +114,19 @@ def main():
     # Create analyzer instance
     analyzer = PortfolioAnalyzer(portfolio_df)
     
+    # Handle export options
+    if args.export_pdf or args.export_excel:
+        report_gen = ReportGenerator(portfolio_df)
+        
+        if args.export_pdf:
+            filepath = report_gen.generate_pdf(args.output)
+            console.print(f"\n[green]PDF report generated:[/green] {filepath}")
+        
+        if args.export_excel:
+            filepath = report_gen.generate_excel(args.output)
+            console.print(f"\n[green]Excel report generated:[/green] {filepath}")
+    
+    # Display portfolio information
     if args.analysis:
         # Show detailed analysis
         print(analyzer.generate_summary_report())
