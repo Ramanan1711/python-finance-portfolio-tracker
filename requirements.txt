@@ -9,5 +9,3 @@ plotly
 python-dotenv
 fpdf2
 openpyxl
-jinja2
-weasyprint
