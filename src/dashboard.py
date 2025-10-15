@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
 import os
+import time
 
 from api_fetcher import fetch_stock_data, fetch_historical_data
 from analyzer import PortfolioAnalyzer
@@ -177,14 +178,23 @@ def main():
     
     # Auto-refresh
     st.sidebar.title("Settings")
-    if st.sidebar.checkbox("Auto-refresh"):
-        refresh_interval = st.sidebar.slider(
-            "Refresh interval (seconds)",
-            min_value=5,
-            max_value=300,
-            value=60
-        )
-        st.experimental_rerun()
+    try:
+        if st.sidebar.checkbox("Auto-refresh"):
+            refresh_interval = st.sidebar.slider(
+                "Refresh interval (seconds)",
+                min_value=5,
+                max_value=300,
+                value=60
+            )
+            st.empty()  # Clear any previous content
+            time.sleep(refresh_interval)
+            st.rerun()
+    except Exception as e:
+        st.error(f"Auto-refresh error: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
+        raise e
