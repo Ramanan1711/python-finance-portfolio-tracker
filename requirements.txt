@@ -1,3 +1,6 @@
 yfinance
 pandas
 tabulate
+schedule
+plyer
+rich

@@ -1,0 +1,22 @@
+{
+    "price_alerts": [
+        {
+            "id": 0,
+            "symbol": "TCS",
+            "condition": "below",
+            "target_price": 2969.5,
+            "notification_type": "desktop",
+            "created_at": "2025-10-15T13:32:34.911306",
+            "triggered": true
+        },
+        {
+            "id": 1,
+            "symbol": "TCS",
+            "condition": "above",
+            "target_price": 2970.5,
+            "notification_type": "desktop",
+            "created_at": "2025-10-15T13:32:35.190777",
+            "triggered": false
+        }
+    ]
+}
