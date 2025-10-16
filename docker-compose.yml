@@ -8,6 +8,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./reports:/app/reports
+      - ./db:/app/db
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped

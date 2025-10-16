@@ -1,21 +1,25 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 from typing import List
 import sys
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from api.portfolio import Portfolio
-from api.models import (
-    PortfolioEntry,
-    AlertRule,
-    PortfolioReport,
-    PortfolioResponse,
-    AlertResponse
+from . import schemas
+from .models.database_session import engine, get_db
+from .models.database import Base, User
+from .auth import (
+    authenticate_user,
+    create_access_token,
+    get_current_active_user,
+    get_password_hash,
+    ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from . import crud
 
 app = FastAPI(
     title="Portfolio Tracker API",
@@ -23,109 +27,139 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Initialize portfolio
-portfolio = Portfolio()
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 async def root():
     """Health check endpoint"""
     return {"status": "healthy", "message": "Portfolio Tracker API is running"}
 
-@app.get("/portfolio", response_model=List[PortfolioResponse])
-async def get_portfolio():
-    """Get the current portfolio with real-time values"""
+@app.post("/users/", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    """Create a new user"""
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
+    return crud.create_user(db=db, user=user)
+
+@app.post("/token", response_model=schemas.Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """Login to get access token"""
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me/", response_model=schemas.User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """Get current user information"""
+    return current_user
+
+@app.get("/portfolio", response_model=List[schemas.PortfolioResponse])
+async def get_portfolio(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get the current user's portfolio with real-time values"""
     try:
-        portfolio_data = portfolio.get_portfolio()
-        return [
-            PortfolioResponse(
-                symbol=entry["symbol"],
-                quantity=entry["quantity"],
-                purchase_price=entry["purchase_price"],
-                purchase_date=entry["purchase_date"],
-                current_price=entry["current_price"],
-                total_value=entry["total_value"],
-                profit_loss=entry["profit_loss"],
-                profit_loss_percentage=entry["profit_loss_percentage"]
-            )
-            for entry in portfolio_data
-        ]
+        return crud.get_user_portfolio(db=db, user_id=current_user.id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/portfolio/entry")
-async def add_portfolio_entry(entry: PortfolioEntry):
-    """Add a new entry to the portfolio"""
+@app.post("/portfolio/entry", response_model=schemas.PortfolioResponse)
+async def add_portfolio_entry(
+    entry: schemas.PortfolioEntry,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Add a new entry to the user's portfolio"""
     try:
-        portfolio.add_stock(
-            entry.symbol,
-            entry.quantity,
-            entry.purchase_price,
-            entry.purchase_date
+        return crud.create_portfolio_entry(
+            db=db,
+            portfolio=entry,
+            user_id=current_user.id
         )
-        return {"status": "success", "message": f"Added {entry.symbol} to portfolio"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.delete("/portfolio/{symbol}")
-async def remove_portfolio_entry(symbol: str):
-    """Remove an entry from the portfolio"""
+async def remove_portfolio_entry(
+    symbol: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Remove an entry from the user's portfolio"""
     try:
-        portfolio.remove_stock(symbol)
+        crud.delete_portfolio_entry(db=db, symbol=symbol, user_id=current_user.id)
         return {"status": "success", "message": f"Removed {symbol} from portfolio"}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-@app.post("/alerts")
-async def create_alert(alert: AlertRule):
-    """Create a new price alert"""
+@app.post("/alerts", response_model=schemas.AlertResponse)
+async def create_alert(
+    alert: schemas.AlertRule,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new price alert for the user"""
     try:
-        portfolio.add_alert(
-            alert.symbol,
-            alert.condition,
-            alert.threshold,
-            alert.email
-        )
-        return {"status": "success", "message": f"Created alert for {alert.symbol}"}
+        return crud.create_alert(db=db, alert=alert, user_id=current_user.id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/alerts", response_model=List[AlertResponse])
-async def get_alerts():
-    """Get all configured alerts"""
+@app.get("/alerts", response_model=List[schemas.AlertResponse])
+async def get_alerts(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get all configured alerts for the user"""
     try:
-        alerts = portfolio.get_alerts()
-        return [
-            AlertResponse(
-                id=str(alert["id"]),
-                symbol=alert["symbol"],
-                condition=alert["condition"],
-                threshold=alert["threshold"],
-                email=alert["email"],
-                status=alert["status"],
-                last_checked=alert.get("last_checked"),
-                last_triggered=alert.get("last_triggered")
-            )
-            for alert in alerts
-        ]
+        return crud.get_user_alerts(db=db, user_id=current_user.id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/alerts/{alert_id}")
-async def remove_alert(alert_id: str):
+async def remove_alert(
+    alert_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     """Remove a price alert"""
     try:
-        portfolio.remove_alert(alert_id)
+        crud.delete_alert(db=db, alert_id=alert_id, user_id=current_user.id)
         return {"status": "success", "message": f"Removed alert {alert_id}"}
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 @app.post("/reports")
-async def generate_report(report_config: PortfolioReport, background_tasks: BackgroundTasks):
-    """Generate a portfolio report"""
+async def generate_report(
+    report_config: schemas.PortfolioReport,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Generate a portfolio report for the user"""
     try:
         # Generate report in the background
         background_tasks.add_task(
-            portfolio.generate_report,
+            crud.generate_report,
+            db=db,
+            user_id=current_user.id,
             format=report_config.format,
             include_charts=report_config.include_charts
         )
@@ -138,10 +172,12 @@ async def generate_report(report_config: PortfolioReport, background_tasks: Back
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/analysis/{symbol}")
-async def get_stock_analysis(symbol: str):
+async def get_stock_analysis(
+    symbol: str,
+    current_user: User = Depends(get_current_active_user)
+):
     """Get detailed analysis for a specific stock"""
     try:
-        analysis = portfolio.analyze_stock(symbol)
-        return analysis
+        return crud.analyze_stock(symbol)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))

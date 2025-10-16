@@ -14,3 +14,8 @@ uvicorn
 pydantic
 python-multipart
 email-validator
+python-jose[cryptography]
+passlib[bcrypt]
+sqlalchemy
+alembic
+requests
