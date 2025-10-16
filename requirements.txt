@@ -9,3 +9,8 @@ plotly
 python-dotenv
 fpdf2
 openpyxl
+fastapi
+uvicorn
+pydantic
+python-multipart
+email-validator

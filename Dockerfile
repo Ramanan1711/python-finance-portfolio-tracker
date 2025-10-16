@@ -27,12 +27,12 @@ COPY data/sample-portfolio.csv data/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose port for Streamlit
-EXPOSE 8501
+# Expose port for FastAPI
+EXPOSE 8000
 
 # Create a non-root user
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Run the Streamlit app
-CMD ["streamlit", "run", "src/dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Run the FastAPI app with uvicorn
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
